@@ -25,7 +25,11 @@ jobs:
       - run: npm install -g npm@latest
       - run: npm publish --access public
         working-directory: mcp
-      - name: GitHub release
-        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag || true
+      - name: GitHub release from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="## $version" '$0==v{on=1;next} /^## /{on=0} on' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section for $version"; exit 1; }
+          gh release create "$GITHUB_REF_NAME" --title "axbridge $version" --notes-file notes.md --verify-tag
         env:
           GH_TOKEN: ${{ github.token }}

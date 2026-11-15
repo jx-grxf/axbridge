@@ -11,22 +11,20 @@ permissions:
 jobs:
   release:
     runs-on: macos-15
-    env:
-      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      - name: Check that the tag matches the package version
+        run: test "v$(node -p "require('./mcp/package.json').version")" = "$GITHUB_REF_NAME"
       - run: npm ci && npm run build && npm test
         working-directory: mcp
-      - name: Publish axbridge-mcp
-        if: env.HAS_NPM_TOKEN == 'true'
-        run: npm publish --provenance --access public
+      # Trusted publishing: npm checks this workflow's OIDC token, no secret is stored.
+      - run: npm install -g npm@latest
+      - run: npm publish --access public
         working-directory: mcp
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: GitHub release
         run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag || true
         env:

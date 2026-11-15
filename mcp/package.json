@@ -1,6 +1,6 @@
 {
   "name": "axbridge-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server that lets coding agents drive iOS Simulator apps as text: read the screen from the accessibility tree, tap by name, type, scroll, plus device, app and screenshot tools.",
   "keywords": [
     "mcp",
@@ -28,7 +28,8 @@
   "bugs": "https://github.com/jx-grxf/axbridge/issues",
   "type": "module",
   "bin": {
-    "axbridge-mcp": "dist/index.js"
+    "axbridge-mcp": "dist/index.js",
+    "axbridge": "dist/index.js"
   },
   "files": [
     "dist",

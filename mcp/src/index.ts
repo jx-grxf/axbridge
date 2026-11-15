@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
@@ -11,17 +11,24 @@ import { listDevices, resolveDevice, ensureBooted, type Device } from "./devices
 import { newSession, sessionFor, call } from "./bridge.js";
 import { screenshot, compare, OUTPUT_DIR } from "./images.js";
 import { buildForSimulator, bundleIdOf } from "./build.js";
+import { VERSION, newerVersion, updateHint } from "./version.js";
 
-const VERSION = "0.1.0";
+if (process.argv.length > 2) {
+  const { runCli } = await import("./cli.js");
+  process.exit(await runCli(process.argv.slice(2)));
+}
+
+const latest = await newerVersion();
 
 const INSTRUCTIONS = `axbridge drives iOS Simulator apps as text.
 Workflow: \`launch\` (or \`build_and_run\`) starts the app with the bridge and returns the screen as text.
 Then use \`tap\`, \`type\`, \`scroll\`, \`back\`, \`go\`; each returns the new screen as text, so \`screen\` is rarely needed.
 Targets for tap: exact or partial label/value text, "#3" (number from the last listing) or "id:identifier".
 Use \`screenshot\` only to judge visuals; pass \`element\` to crop to one element. Several devices can run at once:
-pass \`device\` (name, UDID or "booted") to every call.`;
+pass \`device\` (name, UDID or "booted") to every call.${latest ? `\n\n${updateHint(latest)}` : ""}`;
 
 const server = new McpServer({ name: "axbridge", version: VERSION }, { instructions: INSTRUCTIONS });
+let updateMentioned = false;
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 
@@ -37,7 +44,12 @@ function tool<S extends z.ZodRawShape>(
 ) {
   server.registerTool(name, { description, inputSchema: shape }, (async (args: z.infer<z.ZodObject<S>>) => {
     try {
-      return await handler(args);
+      const result = await handler(args);
+      if (latest && !updateMentioned) {
+        updateMentioned = true;
+        result.content.push({ type: "text", text: `\n${updateHint(latest)}` });
+      }
+      return result;
     } catch (error) {
       return { content: [{ type: "text" as const, text: (error as Error).message }], isError: true };
     }
@@ -350,6 +362,55 @@ tool("compare", "Pixel-compare the current screen (or an image file) with a refe
   }
   const result = await compare(actualPath, reference, threshold ?? 0.1);
   return text(`${result.diffPercent}% of pixels differ (${result.diffPixels}). Diff image: ${result.diffImage}`);
+});
+
+// MARK: Updates
+
+async function findPins(root: string, depth = 0, found: string[] = []): Promise<string[]> {
+  if (depth > 5 || found.length > 20) return found;
+  let entries;
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return found;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith(".") && entry.name !== ".mcp.json" && entry.name !== ".cursor" && entry.name !== ".codex") continue;
+    if (["node_modules", "DerivedData", "build", "Pods", ".build"].includes(entry.name)) continue;
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      await findPins(path, depth + 1, found);
+    } else if (/^(Package\.swift|Package\.resolved|project\.yml|project\.pbxproj|\.mcp\.json|mcp\.json|config\.toml)$/.test(entry.name)) {
+      const lines = (await readFile(path, "utf8").catch(() => "")).split("\n");
+      lines.forEach((line, i) => {
+        if (/axbridge/i.test(line) && /\d+\.\d+\.\d+|revision|version/i.test(line)) found.push(`${path}:${i + 1}: ${line.trim()}`);
+      });
+    }
+  }
+  return found;
+}
+
+tool("update", "Check for a newer axbridge, preload it for npx and list where the app and agent configs pin a version.", {
+  project: z.string().optional().describe("App repository to search for version pins (Package.swift, Package.resolved, project.yml, MCP configs)"),
+}, async ({ project }) => {
+  const newest = await newerVersion(5000);
+  const lines: string[] = [];
+  if (!newest) {
+    lines.push(`axbridge-mcp ${VERSION} is the newest version (or npm is unreachable).`);
+  } else {
+    await run("npx", ["-y", `axbridge-mcp@${newest}`, "--version"], { timeoutMs: 180_000 });
+    lines.push(
+      `axbridge ${newest} is available, this server runs ${VERSION}. npx now has ${newest} cached.`,
+      "1. Restart the axbridge MCP server so the new version runs (Claude Code: /mcp, then reconnect axbridge; Codex and Cursor: restart the session). If a config pins a version, raise it.",
+      `2. Raise the AXBridge Swift package to ${newest} (tag v${newest}) and rebuild the app; app and server should run the same version.`,
+      `Release notes: https://github.com/jx-grxf/axbridge/releases/tag/v${newest}`,
+    );
+  }
+  if (project) {
+    const pins = await findPins(project);
+    lines.push("", pins.length ? `Version pins in ${project}:\n${pins.join("\n")}` : `No axbridge version pins found in ${project}.`);
+  }
+  return text(lines.join("\n"));
 });
 
 const transport = new StdioServerTransport();

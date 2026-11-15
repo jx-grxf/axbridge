@@ -44,6 +44,11 @@ The agent answers with `tap "Wien Praterstern"` and gets the next screen back as
 - `scroll`, `back` (closes a sheet or pops the navigation stack) and `go` (opens a deep link through your app's own handler, without the system's “Open in …?” prompt).
 - Every action returns the new screen, so an agent rarely needs a separate read.
 
+**Staying current**
+- The server checks npm at most once a day. When a newer version exists, the agent is told
+  on its first call and can run `update`, which fetches it and lists every place in your repo
+  that pins a version.
+
 **Seeing**
 - `screenshot` returns a 500 px JPEG; `element` crops it to a single element. The full-resolution PNG is saved next to it for bug reports.
 - `screenshots` captures several simulators at once, for example one layout on three screen widths.
@@ -133,7 +138,9 @@ Cursor (`.cursor/mcp.json`):
 { "mcpServers": { "axbridge": { "command": "npx", "args": ["-y", "axbridge-mcp"] } } }
 ```
 
-More clients and a ready-made agent prompt: [docs/AGENTS.md](docs/AGENTS.md).
+Or let the CLI write the config: `npx axbridge-mcp setup claude` (also `codex`, `cursor`, `all`).
+`npx axbridge-mcp doctor` checks Xcode, simulators and the installed version. More clients and
+a ready-made agent prompt: [docs/AGENTS.md](docs/AGENTS.md).
 
 ## Requirements
 

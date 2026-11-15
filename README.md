@@ -75,6 +75,15 @@ The first column is the range over earlier agent runs on that app, not a single 
 
 ## Install
 
+**Let your agent do it.** Paste this into Claude Code, Codex or Cursor inside your app's
+repository:
+
+```text
+Set up axbridge (https://github.com/jx-grxf/axbridge) for this iOS app: add the AXBridge Swift package (from 0.1.0) to the app target, call AXBridge.start(openURL:) at launch with our deep-link handler, register the MCP server with `npx -y axbridge-mcp` for this agent, then build_and_run the app on a simulator and show me the first screen as text.
+```
+
+Or by hand:
+
 **1. Add the Swift package to your app**
 
 In Xcode: *File › Add Package Dependencies…* → `https://github.com/jx-grxf/axbridge`. Or in

@@ -1,0 +1,29 @@
+name: AXBridgeExample
+options:
+  bundleIdPrefix: dev.axbridge
+  deploymentTarget:
+    iOS: "18.0"
+packages:
+  AXBridge:
+    path: ..
+targets:
+  AXBridgeExample:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    dependencies:
+      - package: AXBridge
+    info:
+      path: Sources/Info.plist
+      properties:
+        UILaunchScreen: {}
+        CFBundleDisplayName: AXBridge Example
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.axbridge.example
+            CFBundleURLSchemes: [axdemo]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.axbridge.example
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        CODE_SIGNING_ALLOWED: NO

@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  mcp:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  swift:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests (macOS)
+        run: swift test
+      - name: Build for the iOS Simulator, Debug and Release
+        run: |
+          for config in Debug Release; do
+            xcodebuild -scheme AXBridge -destination 'generic/platform=iOS Simulator' -configuration "$config" build -quiet
+          done

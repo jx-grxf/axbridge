@@ -101,20 +101,25 @@ In Xcode: *File › Add Package Dependencies…* → `https://github.com/jx-grxf
 Start it once, as early as possible:
 
 ```swift
+#if DEBUG
 import AXBridge
+#endif
 
 @main
 struct MyApp: App {
     init() {
+        #if DEBUG
         AXBridge.start(openURL: { url in DeepLinkRouter.shared.open(url) })
+        #endif
     }
     // …
 }
 ```
 
 `openURL` is optional; pass your deep-link handler so `go` reaches it directly. The bridge
-exists only in Debug builds running in the Simulator, and only starts when the app is
-launched by axbridge. In Release and on devices `start` compiles to nothing.
+runs only in Debug builds in the Simulator, and only starts when the app is launched by
+axbridge. Release builds contain no code from the package, not even its type names, so the
+`#if DEBUG` around the import and the call is required.
 
 **2. Add the MCP server to your agent**
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+**Swift package**
+- Release builds contain no code from the package: `AXBridge` and the HTTP helpers exist only in Debug builds. Wrap `import AXBridge` and `AXBridge.start` in `#if DEBUG`.
+
 ## 0.1.1
 
 **CLI**

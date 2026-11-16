@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// A minimal HTTP/1.1 request, enough for the loopback protocol between the app and the
@@ -55,3 +56,4 @@ public enum BridgeResponse {
         return Data((head + body).utf8)
     }
 }
+#endif

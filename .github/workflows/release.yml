@@ -16,7 +16,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
       - name: Check that the tag matches the package version
         run: test "v$(node -p "require('./mcp/package.json').version")" = "$GITHUB_REF_NAME"
       - run: npm ci && npm run build && npm test

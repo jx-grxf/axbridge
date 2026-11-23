@@ -1,4 +1,6 @@
+#if DEBUG
 import AXBridge
+#endif
 import SwiftUI
 
 @main
@@ -6,7 +8,9 @@ struct ExampleApp: App {
     private let router = Router.shared
 
     init() {
+        #if DEBUG
         AXBridge.start(openURL: { Router.shared.open($0) })
+        #endif
     }
 
     var body: some Scene {
@@ -51,12 +55,28 @@ struct RootView: View {
 struct StationsView: View {
     @Environment(Router.self) private var router
     @State private var query = ""
+    @State private var pinned: Set<String> = []
 
     var body: some View {
         @Bindable var router = router
         NavigationStack(path: $router.path) {
             List(stations.filter { query.isEmpty || $0.localizedCaseInsensitiveContains(query) }, id: \.self) { name in
-                NavigationLink(name, value: name)
+                NavigationLink(value: name) {
+                    HStack {
+                        Text(name)
+                        if pinned.contains(name) {
+                            Spacer()
+                            Image(systemName: "pin.fill")
+                                .accessibilityLabel("Pinned")
+                        }
+                    }
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(pinned.contains(name) ? "Unpin" : "Pin") {
+                        if pinned.contains(name) { pinned.remove(name) } else { pinned.insert(name) }
+                    }
+                    .tint(.orange)
+                }
             }
             .searchable(text: $query, prompt: "Search stations")
             .navigationTitle("Stations")
@@ -98,14 +118,35 @@ struct StationDetail: View {
 
 struct SettingsView: View {
     @AppStorage("compact") private var compact = false
+    @AppStorage("refreshMinutes") private var refreshMinutes = 5
+    @State private var showingResetAlert = false
+
+    private var isAXBridgeActive: Bool {
+        #if DEBUG
+        AXBridge.isActive
+        #else
+        false
+        #endif
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Toggle("Compact rows", isOn: $compact)
-                Text(AXBridge.isActive ? "Launched by axbridge" : "Launched normally")
+                Stepper("Refresh every \(refreshMinutes) min", value: $refreshMinutes, in: 1...30)
+                Button("Reset preferences", role: .destructive) { showingResetAlert = true }
+                Text(isAXBridgeActive ? "Launched by axbridge" : "Launched normally")
             }
             .navigationTitle("Settings")
+            .alert("Reset Preferences?", isPresented: $showingResetAlert) {
+                Button("Reset", role: .destructive) {
+                    compact = false
+                    refreshMinutes = 5
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This restores default settings.")
+            }
         }
     }
 }

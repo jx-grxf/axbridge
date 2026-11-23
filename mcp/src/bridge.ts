@@ -17,11 +17,12 @@ const STATE_FILE = join(STATE_DIR, "sessions.json");
 const sessions = new Map<string, Session>();
 let loaded = false;
 
-async function load(): Promise<void> {
-  if (loaded) return;
+async function load(force = false): Promise<void> {
+  if (loaded && !force) return;
   loaded = true;
   try {
     const saved = JSON.parse(await readFile(STATE_FILE, "utf8")) as Session[];
+    sessions.clear();
     for (const s of saved) sessions.set(s.udid, s);
   } catch {
     // first run
@@ -54,9 +55,18 @@ export async function newSession(udid: string, bundleId: string): Promise<Sessio
   return session;
 }
 
+export async function listSessions(): Promise<Session[]> {
+  await load(true);
+  return [...sessions.values()];
+}
+
 export async function sessionFor(udid: string): Promise<Session> {
   await load();
-  const session = sessions.get(udid);
+  let session = sessions.get(udid);
+  if (!session) {
+    await load(true);
+    session = sessions.get(udid);
+  }
   if (!session) throw new CommandError("The app was not launched through axbridge on this simulator. Call `launch` first.");
   return session;
 }
@@ -66,12 +76,23 @@ export interface BridgeReply {
   text: string;
 }
 
-export async function call(session: Session, method: "GET" | "POST", path: string, body = "", timeoutMs = 15_000): Promise<BridgeReply> {
+export async function call(
+  session: Session,
+  method: "GET" | "POST",
+  path: string,
+  body = "",
+  timeoutMs = 15_000,
+  headers?: Record<string, string>,
+): Promise<BridgeReply> {
   try {
     const response = await fetch(`http://127.0.0.1:${session.port}${path}`, {
       method,
       body: method === "POST" ? body : undefined,
-      headers: { "X-AXBridge-Token": session.token, "Content-Type": "text/plain; charset=utf-8" },
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        ...headers,
+        "X-AXBridge-Token": session.token,
+      },
       signal: AbortSignal.timeout(timeoutMs),
     });
     return { status: response.status, text: await response.text() };

@@ -13,6 +13,47 @@ export interface Shot {
   data: string;
 }
 
+export interface CropRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  scale: number;
+}
+
+/** Clamp a point-space crop rectangle against actual pixel dimensions so `sips` never overflows near screen edges. */
+export function clampCrop(
+  crop: CropRect,
+  imgWidth: number,
+  imgHeight: number,
+  pad = 8,
+): { px: number; py: number; width: number; height: number } {
+  const maxW = Math.max(1, imgWidth);
+  const maxH = Math.max(1, imgHeight);
+  const num = (n: number, fallback: number) => (Number.isFinite(n) ? n : fallback);
+  const x = num(crop.x, 0), y = num(crop.y, 0), w = Math.max(0, num(crop.w, 0)), h = Math.max(0, num(crop.h, 0));
+  const scale = num(crop.scale, 1) > 0 ? num(crop.scale, 1) : 1;
+  const px = Math.min(maxW - 1, Math.max(0, Math.round((x - pad) * scale)));
+  const py = Math.min(maxH - 1, Math.max(0, Math.round((y - pad) * scale)));
+  const right = Math.min(maxW, Math.max(px + 1, Math.round((x + w + pad) * scale)));
+  const bottom = Math.min(maxH, Math.max(py + 1, Math.round((y + h + pad) * scale)));
+  return {
+    px,
+    py,
+    width: Math.max(1, right - px),
+    height: Math.max(1, bottom - py),
+  };
+}
+
+export function readPngDimensions(buf: Buffer): { width: number; height: number } {
+  // Fast path: PNG IHDR chunk starts at byte 12 ("IHDR"), width at 16..20, height at 20..24.
+  if (buf.length >= 24 && buf.toString("ascii", 12, 16) === "IHDR") {
+    return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+  }
+  const parsed = PNG.sync.read(buf);
+  return { width: parsed.width, height: parsed.height };
+}
+
 function stamp(): string {
   const time = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-");
   return `${time}-${Math.random().toString(36).slice(2, 6)}`;
@@ -20,7 +61,7 @@ function stamp(): string {
 
 export async function screenshot(
   udid: string,
-  opts: { name?: string; width: number; crop?: { x: number; y: number; w: number; h: number; scale: number } },
+  opts: { name?: string; width: number; crop?: CropRect },
 ): Promise<Shot> {
   await mkdir(OUTPUT_DIR, { recursive: true });
   const stem = (opts.name ?? stamp()).replace(/[^\w.-]+/g, "-");
@@ -28,14 +69,12 @@ export async function screenshot(
   await simctl(["io", udid, "screenshot", "--type=png", full]);
   let source = full;
   if (opts.crop) {
-    const { x, y, w, h, scale } = opts.crop;
-    const pad = 8;
-    const px = Math.max(0, Math.round((x - pad) * scale));
-    const py = Math.max(0, Math.round((y - pad) * scale));
+    const dims = readPngDimensions(await readFile(full));
+    const clamped = clampCrop(opts.crop, dims.width, dims.height, 8);
     source = join(OUTPUT_DIR, `${stem}.crop.png`);
     await run("sips", [
-      "--cropOffset", String(py), String(px),
-      "-c", String(Math.round((h + 2 * pad) * scale)), String(Math.round((w + 2 * pad) * scale)),
+      "--cropOffset", String(clamped.py), String(clamped.px),
+      "-c", String(clamped.height), String(clamped.width),
       full, "--out", source,
     ]);
   }

@@ -1,6 +1,6 @@
 {
   "name": "axbridge-mcp",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "MCP server that lets coding agents drive iOS Simulator apps as text: read the screen from the accessibility tree, tap by name, type, scroll, plus device, app and screenshot tools.",
   "keywords": [
     "mcp",

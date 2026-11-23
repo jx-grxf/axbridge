@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export const VERSION = "0.1.1";
+export const VERSION = "0.2.0";
 const CACHE = join(homedir(), ".cache", "axbridge", "update.json");
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -20,23 +20,25 @@ export function isNewer(candidate: string, current: string): boolean {
   if (a.pre === b.pre) return false;
   if (!a.pre) return true;
   if (!b.pre) return false;
-  return a.pre > b.pre;
+  return a.pre.localeCompare(b.pre, undefined, { numeric: true }) > 0;
 }
 
 /**
  * The newest published version, or null when offline, disabled or not newer. Checks npm at
- * most once a day and never waits longer than `timeoutMs`.
+ * most once a day and never waits longer than `timeoutMs`. With `cacheOnly` it never touches
+ * the network.
  */
-export async function newerVersion(timeoutMs = 1500): Promise<string | null> {
+export async function newerVersion(timeoutMs = 1500, opts: { cacheOnly?: boolean } = {}): Promise<string | null> {
   if (process.env.AXBRIDGE_NO_UPDATE_CHECK) return null;
   let latest: string | undefined;
   try {
     const cached = JSON.parse(await readFile(CACHE, "utf8")) as { checkedAt: number; latest: string };
-    if (Date.now() - cached.checkedAt < DAY) latest = cached.latest;
+    // The MCP server starts from the cache only, however old; a background check refreshes it.
+    if (opts.cacheOnly || Date.now() - cached.checkedAt < DAY) latest = cached.latest;
   } catch {
     // no cache yet
   }
-  if (!latest) {
+  if (!latest && !opts.cacheOnly) {
     try {
       const response = await fetch("https://registry.npmjs.org/axbridge-mcp/latest", { signal: AbortSignal.timeout(timeoutMs) });
       if (!response.ok) return null;

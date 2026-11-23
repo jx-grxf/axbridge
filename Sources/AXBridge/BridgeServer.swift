@@ -69,14 +69,11 @@ final class BridgeServer {
         case ("POST", "/type"):
             guard let input = await reader.focusedOrOnlyInput() else { return noInput() }
             input.insertText(request.body)
+            if request.shouldSubmit { reader.submitInput(input) }
             return ("200 OK", await settled())
         case ("POST", "/clear"):
             guard let input = await reader.focusedOrOnlyInput() else { return noInput() }
-            var count = 0
-            while input.hasText, count < 1000 {
-                input.deleteBackward()
-                count += 1
-            }
+            reader.clearInput(input)
             return ("200 OK", await settled())
         case ("POST", "/go"):
             guard let url = URL(string: argument), url.scheme != nil else {
@@ -89,19 +86,23 @@ final class BridgeServer {
             }
             return ("200 OK", await settled())
         case ("POST", "/scroll"):
-            guard reader.scroll(argument.isEmpty ? "down" : argument) else {
-                return ("409 Conflict", "nothing to scroll")
-            }
-            return ("200 OK", await settled())
+            return await scroll(request.body)
         case ("POST", "/back"):
             guard reader.goBack() else { return ("409 Conflict", "no screen to go back from") }
             return ("200 OK", await settled())
         case ("POST", "/frame"):
+            reader.collect()
             guard let element = reader.find(argument) else { return ("404 Not Found", "not found: \(argument)") }
             let f = element.frame
             return ("200 OK", "\(Int(f.minX)) \(Int(f.minY)) \(Int(f.width)) \(Int(f.height)) \(reader.screenScale)")
+        case ("POST", "/action"):
+            return await performAction(request.body)
+        case ("POST", "/adjust"):
+            return await adjust(request.body)
+        case ("POST", "/wait"):
+            return await waitFor(request.body)
         default:
-            return ("404 Not Found", "GET /screen · POST /tap /type /clear /go /scroll /back /frame")
+            return ("404 Not Found", "GET /screen · POST /tap /type /clear /go /scroll /back /frame /action /adjust /wait")
         }
     }
 
@@ -119,9 +120,92 @@ final class BridgeServer {
         return ("202 Accepted", "cannot activate, tap at \(Int(center.x)) \(Int(center.y))")
     }
 
+    private func performAction(_ body: String) async -> (String, String) {
+        guard let req = ActionRequest.parse(body) else {
+            return ("400 Bad Request", "expected JSON {\"target\": \"...\", \"action\": \"...\"}")
+        }
+        switch reader.performAction(target: req.target, actionName: req.action) {
+        case .ok:
+            return ("200 OK", await settled())
+        case .notFound:
+            return ("404 Not Found", "not found: \(req.target)\n\n" + reader.render(reader.lastElements))
+        case .noMatchingAction(let available):
+            let list = available.isEmpty ? "none" : available.joined(separator: ", ")
+            return ("409 Conflict", "no matching action '\(req.action)' (available: \(list))")
+        }
+    }
+
+    private func adjust(_ body: String) async -> (String, String) {
+        guard let req = AdjustRequest.parse(body) else {
+            return ("400 Bad Request", "expected JSON {\"target\": \"...\", \"direction\": \"increment\"|\"decrement\", \"steps\": 1}")
+        }
+        reader.collect()
+        guard let element = reader.find(req.target) else {
+            return ("404 Not Found", "not found: \(req.target)\n\n" + reader.render(reader.lastElements))
+        }
+        guard reader.adjust(element, direction: req.direction.rawValue, steps: req.steps) else {
+            return ("409 Conflict", "\(req.target) is not an adjustable control (Slider, Stepper, Picker)")
+        }
+        return ("200 OK", await settled())
+    }
+
+    private func waitFor(_ body: String) async -> (String, String) {
+        guard let req = WaitRequest.parse(body) else {
+            return ("400 Bad Request", "expected JSON {\"target\": \"...\", \"state\": \"appear\"|\"disappear\", \"timeoutMs\": 10000}")
+        }
+        let deadline = CFAbsoluteTimeGetCurrent() + Double(req.timeoutMs) / 1000.0
+        while true {
+            reader.collect()
+            let found = reader.find(req.target) != nil
+            if (req.state == .appear && found) || (req.state == .disappear && !found) {
+                return ("200 OK", reader.render(reader.lastElements))
+            }
+            let remaining = deadline - CFAbsoluteTimeGetCurrent()
+            if remaining <= 0 {
+                return ("408 Request Timeout", "timed out waiting for \(req.target) to \(req.state.rawValue)\n\n" + reader.render(reader.lastElements))
+            }
+            let sleepNs = UInt64(min(0.15, remaining) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: max(1_000_000, sleepNs))
+        }
+    }
+
+    private func scroll(_ body: String) async -> (String, String) {
+        guard let req = ScrollRequest.parse(body) else {
+            return ("400 Bad Request", "expected down|up|top|bottom|left|right or JSON {\"direction\": \"down\", \"target\": \"...\", \"maxSwipes\": 8}")
+        }
+        guard let target = req.target else {
+            guard reader.scroll(req.direction) else {
+                return ("409 Conflict", "nothing to scroll")
+            }
+            return ("200 OK", await settled())
+        }
+        reader.collect()
+        if reader.find(target) != nil {
+            return ("200 OK", reader.render(reader.lastElements))
+        }
+        for _ in 0..<req.maxSwipes {
+            guard reader.scroll(req.direction) else { break }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            reader.collect()
+            if reader.find(target) != nil {
+                return ("200 OK", reader.render(reader.lastElements))
+            }
+        }
+        let screen = reader.render(reader.collect())
+        return ("409 Conflict", "not found after scrolling: \(target)\n\n" + screen)
+    }
+
     private func settled() async -> String {
-        try? await Task.sleep(nanoseconds: 700_000_000)
-        return reader.render(reader.collect())
+        let deadline = CFAbsoluteTimeGetCurrent() + 0.9
+        try? await Task.sleep(nanoseconds: 180_000_000)
+        var previous = reader.render(reader.collect())
+        while CFAbsoluteTimeGetCurrent() < deadline {
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            let current = reader.render(reader.collect())
+            if current == previous { return current }
+            previous = current
+        }
+        return previous
     }
 }
 #endif

@@ -1,9 +1,27 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 **Swift package**
 - Release builds contain no code from the package: `AXBridge` and the HTTP helpers exist only in Debug builds. Wrap `import AXBridge` and `AXBridge.start` in `#if DEBUG`.
+- Alerts, confirmation dialogs, popovers and overlay windows are now detected and listed on top of the main window.
+- Custom accessibility actions (`.swipeActions` etc.) appear as `actions:[…]` in `/screen` and can be invoked via `POST /action`.
+- Adjustable controls (`Slider`, `Stepper`, `Picker`) can be driven via `POST /adjust` (`increment` / `decrement`).
+- In-process `POST /wait` waits for elements/text to appear or disappear; `POST /scroll` accepts JSON with `target` to scroll until visible; `POST /type` supports `X-AXBridge-Submit: 1`; `POST /clear` reliably clears `UITextField` and `UITextView` regardless of cursor position.
+- Adaptive settling replaces the fixed 700 ms post-action delay.
+
+**MCP server, CLI, TUI & local analytics**
+- **Xcode 27 / macOS 27 Device Hub support:** `boot --show`, `doctor`, and the TUI automatically detect and open `DeviceHub.app` (falling back to `Simulator.app` on Xcode 26 and earlier).
+- **New MCP tools:** `action`, `adjust`, `wait_for`, `logs` (recent simulator app/process logs), `analytics`, plus `submit` on `type` and `target` on `scroll`.
+- **Local analytics & insights:** privacy-first JSONL telemetry at `~/.cache/axbridge/analytics.jsonl` (`AXBRIDGE_NO_ANALYTICS=1` to disable, never logs typed text or secrets) with p50/p95 latency, error rates, token savings, and automated improvement suggestions.
+- **Interactive TUI & upgraded CLI:** `npx axbridge-mcp tui` launches a 4-tab terminal UI (Live Screen Inspector, Devices & Device Hub, Analytics Dashboard, Doctor); CLI adds styled output and `devices`, `boot`, `tap`, `type`, `scroll`, `action`, `adjust`, `back`, `go`, `wait`, `logs`, `analytics`.
+- **Review fixes:**
+  - Swift: a negative `Content-Length` no longer crashes the app; `/scroll` rejects unknown directions with `400`; `/adjust` refuses elements that are not adjustable and now really drives SwiftUI `Stepper` (it reported success without changing anything), and tapping a stepper button works; `/clear` selects all and deletes, so delegates and SwiftUI bindings see a normal edit; labels with line breaks stay on one line; custom actions are called through their IMP only for the signatures UIKit documents; `/frame` reads the current screen.
+  - CLI: `doctor` and `analytics` wrap and cap their boxes to the terminal width (many saved sessions no longer stretch the frame, the top border is as wide as the body, wide characters are measured by terminal cells); the screen parser reads the unquoted listing the app prints; numeric flags are validated, `--` ends flags, unknown commands exit 1 with help on stderr, a non-activatable element exits 2, and output is flushed before exit.
+  - TUI: flicker-free redraw, whole-chunk key handling (fast arrow repeats, paste), analytics and doctor tabs fit the terminal, terminal is restored after a crash or hang-up.
+  - Analytics: deep links are reduced to scheme and host, error messages to their first line (bridge errors carried field contents), the home directory is masked, the file stays bounded and damaged lines are skipped.
+  - MCP: starts from the cached update check instead of waiting for npm; `logs` matches the app's real executable name, requests `info` messages, reports an empty result and explains a shut-down simulator; the selected Xcode's viewer wins over another install; `record_stop` no longer hangs when the recording already ended.
+- **Bug fixes:** clamped element screenshot crops to PNG bounds to prevent `sips` edge errors, ensured `OUTPUT_DIR` exists for `record_start`, cleaned up temp files in `push`, and wrapped `ExampleApp.swift` in `#if DEBUG`.
 
 ## 0.1.1
 

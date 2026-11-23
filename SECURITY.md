@@ -4,8 +4,9 @@ axbridge opens a TCP port inside your app so an agent on the same Mac can read a
 its UI. These limits keep that port from becoming a problem:
 
 - **Debug and Simulator only.** All server code sits behind
-  `#if canImport(UIKit) && DEBUG && targetEnvironment(simulator)`. Release builds and builds
-  for physical devices contain an empty `AXBridge.start`.
+  `#if canImport(UIKit) && DEBUG && targetEnvironment(simulator)`. Release builds contain no
+  code from the package at all, so the app wraps `import AXBridge` and `AXBridge.start` in
+  `#if DEBUG`. On a physical device `start` does nothing.
 - **Off unless asked.** The server starts only when the app is launched with `--axbridge`,
   which the MCP server passes. Launching from Xcode or the home screen does not start it.
 - **Loopback only.** The listener binds to `127.0.0.1`.
@@ -16,6 +17,10 @@ its UI. These limits keep that port from becoming a problem:
   on the same Mac cannot reach the port even if it guessed it.
 - Session data (port and token per simulator) is kept in `~/.cache/axbridge/sessions.json`
   with mode `0600`.
+- Local usage analytics (`~/.cache/axbridge/analytics.jsonl`, mode `0600`, never sent anywhere,
+  off with `AXBRIDGE_NO_ANALYTICS=1`) record tool names, timings and error kinds. They never
+  contain typed text, environment variables, push payloads or screen contents; deep links are
+  reduced to scheme and host, error messages to their first line.
 
 The bridge can do whatever a user of the app can do in the Simulator. Do not ship a build
 that calls `AXBridge.start()` from a configuration that defines `DEBUG` to anyone.

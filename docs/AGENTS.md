@@ -44,8 +44,9 @@ Use the axbridge MCP tools to check the app in the Simulator.
 - Start with `build_and_run` (scheme <YourScheme>) or `launch` (bundle id <your.bundle.id>).
   Pass `defaults: { <yourOnboardingKey>: true }` to skip onboarding unless onboarding is
   what you are checking.
-- Navigate and read with text: `tap`, `type`, `scroll`, `back`, `go`. Each returns the new
-  screen. Deep links: <list your app's routes>.
+- Navigate and read with text: `tap`, `type`, `scroll`, `action` (swipe actions), `adjust`
+  (sliders, steppers), `wait_for`, `back`, `go`. Each returns the new screen. Deep links:
+  <list your app's routes>. `logs` shows recent app output when something looks wrong.
 - Take a `screenshot` only to judge layout, colour or truncation; prefer `element` to crop.
 - Check narrow and wide phones with `screenshots` on two or three simulators.
 - Report what you saw, the path you took and the screenshot paths. Do not guess.
@@ -53,6 +54,8 @@ Use the axbridge MCP tools to check the app in the Simulator.
 
 ## Tips
 
+- The app must wrap `import AXBridge` and `AXBridge.start(openURL:)` in `#if DEBUG`; Release
+  builds contain no code from the package.
 - Give elements in your app accessibility identifiers where labels are ambiguous; `tap`
   accepts `id:<identifier>`.
 - Elements without a label do not show up in `screen`. That is a VoiceOver bug as well.

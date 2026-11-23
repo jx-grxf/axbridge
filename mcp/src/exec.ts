@@ -30,7 +30,17 @@ export function simctl(args: string[], opts: { env?: NodeJS.ProcessEnv; timeoutM
 }
 
 export function background(cmd: string, args: string[]): ChildProcess {
-  return spawn(cmd, args, { stdio: "ignore" });
+  const child = spawn(cmd, args, { stdio: "ignore" });
+  // A missing binary must not crash the server with an unhandled 'error' event.
+  child.on("error", () => undefined);
+  return child;
+}
+
+/** Waits for stdout and stderr to drain, so `process.exit` cannot cut off piped output. */
+export async function flushStdio(): Promise<void> {
+  await Promise.all(
+    [process.stdout, process.stderr].map((stream) => new Promise<void>((resolve) => stream.write("", () => resolve()))),
+  );
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
